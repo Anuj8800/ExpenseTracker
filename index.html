@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Personal Expense Tracker</title>
+    <style>
+        body {
+            max-width: 700px;
+            margin: 30px auto;
+            padding: 0 15px;
+            font-family: Arial, sans-serif;
+        }
+
+        label {
+            display: block;
+            margin-top: 10px;
+        }
+
+        input,
+        button {
+            margin-top: 5px;
+            padding: 7px;
+        }
+
+        li {
+            margin: 12px 0;
+        }
+    </style>
+</head>
+<body>
+    <h1>Personal Expense Tracker</h1>
+
+    <h2 id="form-title">Add expense</h2>
+    <form id="expense-form">
+        <input id="expense-id" type="hidden">
+
+        <label for="description">Description</label>
+        <input id="description" type="text" placeholder="Lunch or Bus fare" required>
+
+        <label for="amount">Amount</label>
+        <input id="amount" type="number" min="0.01" step="0.01" required>
+
+        <label for="category">Category</label>
+        <input id="category" type="text" placeholder="Food or Travel" required>
+
+        <br>
+        <button id="submit-button" type="submit">Add expense</button>
+        <button id="cancel-button" type="button" hidden>Cancel update</button>
+    </form>
+
+    <p id="message"></p>
+
+    <h2>Expenses</h2>
+    <p id="total-amount">Total spent: 0.00</p>
+    <ul id="expense-list"></ul>
+
+    <script>
+        const form = document.getElementById("expense-form");
+        const idInput = document.getElementById("expense-id");
+        const descriptionInput = document.getElementById("description");
+        const amountInput = document.getElementById("amount");
+        const categoryInput = document.getElementById("category");
+        const submitButton = document.getElementById("submit-button");
+        const cancelButton = document.getElementById("cancel-button");
+        const message = document.getElementById("message");
+        const expenseList = document.getElementById("expense-list");
+        const totalAmount = document.getElementById("total-amount");
+
+        async function showExpenses() {
+            try {
+                const response = await fetch("/api/expenses");
+                const expenses = await response.json();
+                expenseList.replaceChildren();
+
+                let total = 0;
+                for (const expense of expenses) {
+                    total += Number(expense.amount);
+
+                    const item = document.createElement("li");
+                    const details = document.createElement("span");
+                    details.textContent = `ID: ${expense.id} | ${expense.description} | ${expense.category} | ${Number(expense.amount).toFixed(2)} `;
+
+                    const editButton = document.createElement("button");
+                    editButton.type = "button";
+                    editButton.textContent = "Edit";
+                    editButton.addEventListener("click", () => editExpense(expense));
+
+                    const deleteButton = document.createElement("button");
+                    deleteButton.type = "button";
+                    deleteButton.textContent = "Delete";
+                    deleteButton.addEventListener("click", () => deleteExpense(expense.id));
+
+                    item.append(details, editButton, deleteButton);
+                    expenseList.appendChild(item);
+                }
+
+                totalAmount.textContent = `Total spent: ${total.toFixed(2)}`;
+                if (expenses.length === 0) {
+                    expenseList.textContent = "No expenses yet.";
+                }
+            } catch (error) {
+                message.textContent = error.message;
+            }
+        }
+
+        function editExpense(expense) {
+            idInput.value = expense.id;
+            descriptionInput.value = expense.description;
+            amountInput.value = expense.amount;
+            categoryInput.value = expense.category;
+            document.getElementById("form-title").textContent = "Update expense";
+            submitButton.textContent = "Save changes";
+            cancelButton.hidden = false;
+        }
+
+        function clearForm() {
+            form.reset();
+            idInput.value = "";
+            document.getElementById("form-title").textContent = "Add expense";
+            submitButton.textContent = "Add expense";
+            cancelButton.hidden = true;
+        }
+
+        async function deleteExpense(id) {
+            try {
+                const response = await fetch(`/api/expenses/${id}`, {
+                    method: "DELETE"
+                });
+                const result = await response.json();
+
+                if (!response.ok) {
+                    message.textContent = result.detail;
+                    return;
+                }
+
+                if (idInput.value === String(id)) {
+                    clearForm();
+                }
+                message.textContent = result.message;
+                await showExpenses();
+            } catch (error) {
+                message.textContent = error.message;
+            }
+        }
+
+        form.addEventListener("submit", async (event) => {
+            event.preventDefault();
+
+            const description = descriptionInput.value.trim();
+            const amount = Number(amountInput.value);
+            const category = categoryInput.value.trim();
+
+            if (description === "") {
+                message.textContent = "Description cannot be empty.";
+                return;
+            }
+            if (!Number.isFinite(amount) || amount <= 0) {
+                message.textContent = "Amount must be greater than zero.";
+                return;
+            }
+            if (category === "") {
+                message.textContent = "Category cannot be empty.";
+                return;
+            }
+
+            const expense = { description: description, amount: amount, category: category };
+            const id = idInput.value;
+            let response;
+
+            try {
+                if (id === "") {
+                    response = await fetch("/api/expenses", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify(expense)
+                    });
+                } else {
+                    response = await fetch(`/api/expenses/${id}`, {
+                        method: "PUT",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify(expense)
+                    });
+                }
+
+                const result = await response.json();
+                if (!response.ok) {
+                    message.textContent = result.detail;
+                    return;
+                }
+
+                message.textContent = id === ""
+                    ? "Expense added successfully."
+                    : "Expense updated successfully.";
+                clearForm();
+                await showExpenses();
+            } catch (error) {
+                message.textContent = error.message;
+            }
+        });
+
+        cancelButton.addEventListener("click", clearForm);
+        showExpenses();
+    </script>
+</body>
+</html>
